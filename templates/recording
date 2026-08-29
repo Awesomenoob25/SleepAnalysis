@@ -1,0 +1,52 @@
+import cv2
+import os
+from datetime import datetime
+
+# Create the recordings folder if it doesn't exist
+output_folder = "recordings"
+os.makedirs(output_folder, exist_ok=True)
+
+# Create a filename using the current date and time
+filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+filepath = os.path.join(output_folder, filename)
+
+# Open the webcam
+camera = cv2.VideoCapture(1)
+
+if not camera.isOpened():
+    print("Could not open webcam")
+    exit()
+
+# Get webcam properties
+width = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fps = 20.0
+
+# Create the video writer
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+writer = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
+
+print("Recording...")
+print("Press Q to stop.")
+
+while True:
+    success, frame = camera.read()
+
+    if not success:
+        break
+
+    # Save frame to the video
+    writer.write(frame)
+
+    # Display the webcam
+    cv2.imshow("Sleep Monitor", frame)
+
+    # Stop when Q is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+camera.release()
+writer.release()
+cv2.destroyAllWindows()
+
+print(f"\nVideo saved to:\n{filepath}")

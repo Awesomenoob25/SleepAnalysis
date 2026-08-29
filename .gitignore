@@ -216,3 +216,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ==========================================
+# Sleep Monitor - generated/session data
+# ==========================================
+
+# Recorded sleep videos
+recordings/
+*.avi
+*.mp4
+
+# Captured snapshots
+snapshots/
+
+# Uploaded videos/files
+uploads/
+
+# Generated analysis/export files
+exports/
+*.csv
+
+# Runtime sleep-position logs
+sleep_positions.txt

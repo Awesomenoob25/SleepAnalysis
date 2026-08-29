@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width,
+                 initial-scale=1.0"
+    >
+
+    <title>
+        Sleep Monitor - Capture
+    </title>
+
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    >
+
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static',
+        filename='css/style.css') }}"
+    >
+
+</head>
+
+
+<body>
+
+
+<!-- --------------------------------------------------
+NAVIGATION
+--------------------------------------------------- -->
+
+<nav
+    class="navbar
+           navbar-dark
+           bg-dark
+           px-4"
+>
+
+    <span class="navbar-brand">
+
+        Sleep Monitor
+
+    </span>
+
+
+    <div>
+
+        <a
+            href="/"
+            class="btn btn-primary"
+        >
+
+            Sleep Capture & Logging
+
+        </a>
+
+
+        <a
+            href="/analysis"
+            class="btn btn-outline-light"
+        >
+
+            Analysis
+
+        </a>
+
+
+        <a
+            href="/configuration"
+            class="btn btn-outline-light"
+        >
+
+            Setting
+
+        </a>
+
+        <a
+            href="/help"
+            class="btn btn-outline-light"
+        >
+
+            Help
+
+        </a>
+
+    </div>
+
+</nav>
+
+
+<!-- --------------------------------------------------
+MAIN PAGE
+--------------------------------------------------- -->
+
+<div class="container mt-4">
+
+
+    <div class="mb-4">
+
+        <h2>
+
+            Capture & Logging
+
+        </h2>
+
+
+        <p class="text-muted">
+
+            Start and manage an
+            overnight sleep monitoring
+            session.
+
+        </p>
+
+    </div>
+
+
+    <div class="row">
+
+
+        <!-- --------------------------------------------------
+        CAMERA
+        --------------------------------------------------- -->
+
+        <div class="col-lg-8 mb-4">
+
+            <div class="card shadow-sm">
+
+                <div class="card-body">
+
+
+                    <div
+                        class="d-flex
+                               justify-content-between
+                               align-items-center
+                               mb-3"
+                    >
+
+
+                        <h5 class="mb-0">
+
+                            Live Camera
+
+                        </h5>
+
+
+                        <span
+                            id="cameraStatus"
+                            class="badge bg-success"
+                        >
+
+                            Live
+
+                        </span>
+
+                    </div>
+
+
+                    <div class="camera-box">
+
+                        <img
+                            id="cameraFeed"
+                            src="{{ url_for(
+                                'video_feed',
+                                camera_index=default_camera_index
+                            ) }}"
+                            alt="Live Camera Feed"
+                            class="img-fluid"
+                        >
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- --------------------------------------------------
+        SESSION INFORMATION
+        --------------------------------------------------- -->
+
+        <div class="col-lg-4 mb-4">
+
+            <div class="card shadow-sm">
+
+                <div class="card-body">
+
+
+                    <h5>
+
+                        Session Information
+
+                    </h5>
+
+
+                    <!-- SESSION NAME -->
+
+                    <label
+                        class="form-label mt-3"
+                    >
+
+                        Session Name
+
+                    </label>
+
+
+                    <input
+                        id="sessionName"
+                        type="text"
+                        class="form-control"
+                        value="Night_001"
+                    >
+
+
+                    <!-- CAMERA -->
+
+                    <label
+                        class="form-label mt-3"
+                    >
+
+                        Camera
+
+                    </label>
+
+
+                    <select
+                        id="cameraSelect"
+                        class="form-select"
+                        onchange="changeCamera()"
+                    >
+
+
+                        {% if cameras %}
+
+
+                            {% for camera in cameras %}
+
+
+                                <option
+                                    value="{{ camera }}"
+                                    {% if camera == default_camera_index %}selected{% endif %}
+                                >
+
+                                    Camera {{ camera }}
+
+                                    {% if camera == default_camera_index %}
+
+                                        - Default
+
+                                    {% endif %}
+
+                                </option>
+
+
+                            {% endfor %}
+
+
+                        {% else %}
+
+
+                            <option value="0">
+
+                                No cameras detected
+
+                            </option>
+
+
+                        {% endif %}
+
+
+                    </select>
+
+
+                    <div
+                        class="form-text"
+                        id="cameraMessage"
+                    >
+
+                        Select the camera
+                        used for this session.
+
+                    </div>
+
+
+                    <hr>
+
+
+                    <!-- STATUS -->
+
+                    <div class="mb-3">
+
+
+                        <strong>
+
+                            Status:
+
+                        </strong>
+
+
+                        <span
+                            id="statusBadge"
+                            class="badge bg-secondary"
+                        >
+
+                            Stopped
+
+                        </span>
+
+                    </div>
+
+
+                    <p>
+
+                        <strong>
+
+                            Current Position:
+
+                        </strong>
+
+
+                        <span id="currentPosition">
+
+                            --
+
+                        </span>
+
+                    </p>
+
+
+                    <!-- SNAPSHOT INTERVAL -->
+
+                    <label
+                        class="form-label mt-3"
+                        for="snapshotInterval"
+                    >
+
+                        Snapshot Interval
+
+                    </label>
+
+
+                    <select
+                        id="snapshotInterval"
+                        class="form-select"
+                    >
+
+                        <option value="60" {% if default_snapshot_interval == 60 %}selected{% endif %}>
+                            1 minute
+                        </option>
+
+                        <option value="180" {% if default_snapshot_interval == 180 %}selected{% endif %}>
+                            3 minutes
+                        </option>
+
+                        <option value="300" {% if default_snapshot_interval == 300 %}selected{% endif %}>
+                            5 minutes
+                        </option>
+
+                        <option value="600" {% if default_snapshot_interval == 600 %}selected{% endif %}>
+                            10 minutes
+                        </option>
+
+                        <option value="900" {% if default_snapshot_interval == 900 %}selected{% endif %}>
+                            15 minutes
+                        </option>
+
+                    </select>
+
+
+                    <div class="form-text mb-3">
+
+                        Select how often a sleep
+                        snapshot should be saved.
+
+                    </div>
+
+
+                    <!-- START -->
+
+                    <button
+                        id="startButton"
+                        class="btn
+                               btn-success
+                               w-100
+                               mb-2"
+                        onclick="startRecording()"
+                    >
+
+                        Start Session
+
+                    </button>
+
+
+                    <!-- STOP -->
+
+                    <button
+                        id="stopButton"
+                        class="btn
+                               btn-danger
+                               w-100"
+                        onclick="stopRecording()"
+                        disabled
+                    >
+
+                        Stop Session
+
+                    </button>
+
+
+                    <div
+                        id="message"
+                        class="alert
+                               alert-light
+                               mt-3
+                               mb-0"
+                    >
+
+                        Ready to start
+                        a session.
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- --------------------------------------------------
+    LIVE STATISTICS
+    --------------------------------------------------- -->
+
+    <div class="row">
+
+        <div class="col-12 mb-4">
+
+            <div class="card shadow-sm">
+
+                <div class="card-body">
+
+
+                    <div
+                        class="d-flex
+                               justify-content-between
+                               align-items-center
+                               mb-4"
+                    >
+
+
+                        <h5 class="mb-0">
+
+                            Live Sleep
+                            Position Statistics
+
+                        </h5>
+
+
+                        <span
+                            id="livePosition"
+                            class="badge
+                                   bg-primary
+                                   fs-6"
+                        >
+
+                            --
+
+                        </span>
+
+                    </div>
+
+
+                    <!-- SUMMARY -->
+
+                    <div
+                        class="row
+                               text-center
+                               mb-4"
+                    >
+
+
+                        <div class="col-md-4">
+
+                            <strong>
+
+                                Monitoring Time
+
+                            </strong>
+
+
+                            <div
+                                id="monitoringTime"
+                                class="fs-4"
+                            >
+
+                                00:00:00
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="col-md-4">
+
+                            <strong>
+
+                                Position Changes
+
+                            </strong>
+
+
+                            <div
+                                id="positionChanges"
+                                class="fs-4"
+                            >
+
+                                0
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="col-md-4">
+
+                            <strong>
+
+                                Last Position Change
+
+                            </strong>
+
+
+                            <div
+                                id="lastPositionChange"
+                                class="fs-4"
+                            >
+
+                                --
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- BACK -->
+
+                    <p class="mb-1">
+
+                        Back
+
+
+                        <span
+                            id="backPercent"
+                            class="float-end"
+                        >
+
+                            0%
+
+                        </span>
+
+                    </p>
+
+
+                    <div class="progress mb-3">
+
+                        <div
+                            id="backBar"
+                            class="progress-bar"
+                            style="width: 0%"
+                        >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- LEFT SIDE -->
+
+                    <p class="mb-1">
+
+                        Left Side
+
+
+                        <span
+                            id="leftPercent"
+                            class="float-end"
+                        >
+
+                            0%
+
+                        </span>
+
+                    </p>
+
+
+                    <div class="progress mb-3">
+
+                        <div
+                            id="leftBar"
+                            class="progress-bar"
+                            style="width: 0%"
+                        >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- RIGHT SIDE -->
+
+                    <p class="mb-1">
+
+                        Right Side
+
+
+                        <span
+                            id="rightPercent"
+                            class="float-end"
+                        >
+
+                            0%
+
+                        </span>
+
+                    </p>
+
+
+                    <div class="progress mb-3">
+
+                        <div
+                            id="rightBar"
+                            class="progress-bar"
+                            style="width: 0%"
+                        >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- STOMACH -->
+
+                    <p class="mb-1">
+
+                        Stomach
+
+
+                        <span
+                            id="stomachPercent"
+                            class="float-end"
+                        >
+
+                            0%
+
+                        </span>
+
+                    </p>
+
+
+                    <div class="progress mb-3">
+
+                        <div
+                            id="stomachBar"
+                            class="progress-bar"
+                            style="width: 0%"
+                        >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- UNKNOWN -->
+
+                    <p class="mb-1">
+
+                        Unknown
+
+
+                        <span
+                            id="unknownPercent"
+                            class="float-end"
+                        >
+
+                            0%
+
+                        </span>
+
+                    </p>
+
+
+                    <div class="progress">
+
+                        <div
+                            id="unknownBar"
+                            class="progress-bar"
+                            style="width: 0%"
+                        >
+
+                        </div>
+
+                    </div>
+
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+</div>
+
+
+<script>
+
+
+// --------------------------------------------------
+// CHANGE CAMERA
+// --------------------------------------------------
+
+function changeCamera() {
+
+
+    const cameraIndex =
+        document.getElementById(
+            "cameraSelect"
+        ).value;
+
+
+    const cameraFeed =
+        document.getElementById(
+            "cameraFeed"
+        );
+
+
+    const cameraMessage =
+        document.getElementById(
+            "cameraMessage"
+        );
+
+
+    cameraMessage.innerText =
+        "Switching to Camera "
+        + cameraIndex
+        + "...";
+
+
+    cameraFeed.src =
+        "/video_feed?camera_index="
+        + cameraIndex
+        + "&t="
+        + new Date().getTime();
+
+
+    cameraFeed.onload = function() {
+
+
+        cameraMessage.innerText =
+            "Camera "
+            + cameraIndex
+            + " selected.";
+
+    };
+
+}
+
+
+// --------------------------------------------------
+// START RECORDING
+// --------------------------------------------------
+
+function startRecording() {
+
+
+    const cameraIndex =
+        document.getElementById(
+            "cameraSelect"
+        ).value;
+
+
+    const sessionName =
+        document.getElementById(
+            "sessionName"
+        ).value;
+
+
+    const snapshotInterval =
+        document.getElementById(
+            "snapshotInterval"
+        ).value;
+
+
+    const message =
+        document.getElementById(
+            "message"
+        );
+
+
+    message.className =
+        "alert alert-info mt-3 mb-0";
+
+
+    message.innerText =
+        "Starting session...";
+
+
+    fetch(
+        "/start_recording",
+        {
+
+            method: "POST",
+
+            headers: {
+
+                "Content-Type":
+                    "application/json"
+
+            },
+
+
+            body: JSON.stringify({
+
+                camera_index:
+                    cameraIndex,
+
+                session_name:
+                    sessionName,
+
+                snapshot_interval:
+                    snapshotInterval
+
+            })
+
+        }
+    )
+
+
+    .then(response => {
+
+
+        if (!response.ok) {
+
+
+            return response.json()
+
+                .then(data => {
+
+
+                    throw new Error(
+
+                        data.message
+                        || "Unable to start session."
+                    );
+
+                });
+
+        }
+
+
+        return response.json();
+
+    })
+
+
+    .then(data => {
+
+
+        document.getElementById(
+            "statusBadge"
+        ).innerText =
+            "Recording";
+
+
+        document.getElementById(
+            "statusBadge"
+        ).className =
+            "badge bg-success";
+
+
+        message.className =
+            "alert alert-success mt-3 mb-0";
+
+
+        message.innerText =
+            "Session started using Camera "
+            + data.camera_index
+            + " with snapshots every "
+            + (data.snapshot_interval / 60)
+            + " minute(s).";
+
+
+        document.getElementById(
+            "startButton"
+        ).disabled =
+            true;
+
+
+        document.getElementById(
+            "stopButton"
+        ).disabled =
+            false;
+
+
+        document.getElementById(
+            "cameraSelect"
+        ).disabled =
+            true;
+
+
+        document.getElementById(
+            "sessionName"
+        ).disabled =
+            true;
+
+
+        document.getElementById(
+            "snapshotInterval"
+        ).disabled =
+            true;
+
+    })
+
+
+    .catch(error => {
+
+
+        console.error(error);
+
+
+        message.className =
+            "alert alert-danger mt-3 mb-0";
+
+
+        message.innerText =
+            error.message;
+
+    });
+
+}
+
+
+// --------------------------------------------------
+// STOP RECORDING
+// --------------------------------------------------
+
+function stopRecording() {
+
+
+    const message =
+        document.getElementById(
+            "message"
+        );
+
+
+    fetch(
+        "/stop_recording",
+        {
+
+            method: "POST"
+
+        }
+    )
+
+
+    .then(response =>
+        response.json()
+    )
+
+
+    .then(data => {
+
+
+        document.getElementById(
+            "statusBadge"
+        ).innerText =
+            "Stopped";
+
+
+        document.getElementById(
+            "statusBadge"
+        ).className =
+            "badge bg-secondary";
+
+
+        message.className =
+            "alert alert-secondary mt-3 mb-0";
+
+
+        message.innerText =
+            "Session stopped and "
+            + "recording saved.";
+
+
+        document.getElementById(
+            "startButton"
+        ).disabled =
+            false;
+
+
+        document.getElementById(
+            "stopButton"
+        ).disabled =
+            true;
+
+
+        document.getElementById(
+            "cameraSelect"
+        ).disabled =
+            false;
+
+
+        document.getElementById(
+            "sessionName"
+        ).disabled =
+            false;
+
+
+        document.getElementById(
+            "snapshotInterval"
+        ).disabled =
+            false;
+
+    })
+
+
+    .catch(error => {
+
+
+        console.error(error);
+
+
+        message.className =
+            "alert alert-danger mt-3 mb-0";
+
+
+        message.innerText =
+            "Could not stop session.";
+
+    });
+
+}
+
+
+// --------------------------------------------------
+// FORMAT TIME
+// --------------------------------------------------
+
+function formatTime(seconds) {
+
+
+    const hours =
+        Math.floor(
+            seconds / 3600
+        );
+
+
+    const minutes =
+        Math.floor(
+
+            (seconds % 3600)
+
+            / 60
+        );
+
+
+    const secs =
+        Math.floor(
+            seconds % 60
+        );
+
+
+    return (
+
+        String(hours)
+            .padStart(2, "0")
+
+        + ":"
+
+        + String(minutes)
+            .padStart(2, "0")
+
+        + ":"
+
+        + String(secs)
+            .padStart(2, "0")
+    );
+
+}
+
+
+// --------------------------------------------------
+// UPDATE POSITION BAR
+// --------------------------------------------------
+
+function updatePositionBar(
+
+    data,
+
+    positionName,
+
+    elementPrefix
+
+) {
+
+
+    const statistics =
+        data.positions[
+            positionName
+        ];
+
+
+    if (!statistics) {
+
+        return;
+
+    }
+
+
+    const percentage =
+        statistics.percentage;
+
+
+    document.getElementById(
+
+        elementPrefix
+        + "Percent"
+
+    ).innerText =
+
+        percentage
+        + "%";
+
+
+    document.getElementById(
+
+        elementPrefix
+        + "Bar"
+
+    ).style.width =
+
+        percentage
+        + "%";
+
+}
+
+
+// --------------------------------------------------
+// LIVE STATISTICS
+// --------------------------------------------------
+
+function updateLiveStats() {
+
+
+    fetch(
+        "/position_stats"
+    )
+
+
+    .then(response =>
+        response.json()
+    )
+
+
+    .then(data => {
+
+
+        document.getElementById(
+            "livePosition"
+        ).innerText =
+            data.current_position;
+
+
+        document.getElementById(
+            "currentPosition"
+        ).innerText =
+            data.current_position;
+
+
+        document.getElementById(
+            "monitoringTime"
+        ).innerText =
+
+            formatTime(
+                data.monitoring_seconds
+            );
+
+
+        document.getElementById(
+            "positionChanges"
+        ).innerText =
+            data.position_changes;
+
+
+        document.getElementById(
+            "lastPositionChange"
+        ).innerText =
+
+            data.last_position_change
+            || "--";
+
+
+        updatePositionBar(
+
+            data,
+
+            "Back",
+
+            "back"
+        );
+
+
+        updatePositionBar(
+
+            data,
+
+            "Left Side",
+
+            "left"
+        );
+
+
+        updatePositionBar(
+
+            data,
+
+            "Right Side",
+
+            "right"
+        );
+
+
+        updatePositionBar(
+
+            data,
+
+            "Stomach",
+
+            "stomach"
+        );
+
+
+        updatePositionBar(
+
+            data,
+
+            "Unknown",
+
+            "unknown"
+        );
+
+    })
+
+
+    .catch(error => {
+
+
+        console.error(
+
+            "Statistics error:",
+
+            error
+        );
+
+    });
+
+}
+
+
+// --------------------------------------------------
+// UPDATE EVERY SECOND
+// --------------------------------------------------
+
+setInterval(
+
+    updateLiveStats,
+
+    1000
+);
+
+
+updateLiveStats();
+
+
+</script>
+
+
+</body>
+
+</html>

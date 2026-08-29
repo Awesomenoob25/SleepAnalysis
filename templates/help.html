@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Sleep Monitor - Help</title>
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+<nav class="navbar navbar-dark bg-dark px-4">
+    <span class="navbar-brand">
+        Sleep Monitor
+    </span>
+
+    <div>
+        <a
+            href="/"
+            class="btn btn-outline-light"
+        >
+            Capture & Logging
+        </a>
+
+        <a
+            href="/analysis"
+            class="btn btn-outline-light"
+        >
+            Analysis
+        </a>
+
+        <a
+            href="/configuration"
+            class="btn btn-outline-light"
+        >
+            Setting
+        </a>
+
+        <a
+            href="/help"
+            class="btn btn-primary"
+        >
+            Help
+        </a>
+    </div>
+</nav>
+
+
+<div class="container mt-4 mb-5">
+
+    <div class="mb-4">
+        <h2>
+            Help
+        </h2>
+
+        <p class="text-muted">
+            Learn how to configure, record and analyse
+            a sleep monitoring session.
+        </p>
+    </div>
+
+
+    <!-- QUICK START -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">
+                Quick Start
+            </h5>
+
+            <ol class="mb-0">
+                <li class="mb-2">
+                    Open <strong>Configuration</strong>.
+                </li>
+
+                <li class="mb-2">
+                    Select your default camera.
+                </li>
+
+                <li class="mb-2">
+                    Set the Video Recording Location,
+                    Sleep Data Extract Location and
+                    Snapshot Location.
+                </li>
+
+                <li class="mb-2">
+                    Save the configuration.
+                </li>
+
+                <li class="mb-2">
+                    Open <strong>Capture & Logging</strong>.
+                </li>
+
+                <li class="mb-2">
+                    Enter a session name and choose
+                    the snapshot interval.
+                </li>
+
+                <li class="mb-2">
+                    Click <strong>Start Session</strong>
+                    before going to sleep.
+                </li>
+
+                <li class="mb-2">
+                    Click <strong>Stop Session</strong>
+                    when monitoring is complete.
+                </li>
+
+                <li>
+                    Open <strong>Analysis</strong>
+                    to review the saved session.
+                </li>
+            </ol>
+
+        </div>
+    </div>
+
+
+    <!-- CONFIGURATION -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">
+                settings
+            </h5>
+
+            <p>
+                The Setting page controls the
+                main Sleep Monitor settings.
+            </p>
+
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td>
+                                Default Camera
+                            </td>
+                            <td>
+                                Selects the webcam that
+                                Sleep Monitor will use by default.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Default Snapshot Interval
+                            </td>
+                            <td>
+                                Controls how often a snapshot
+                                image is saved during monitoring.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Video Recording Location
+                            </td>
+                            <td>
+                                Folder used for recorded video files.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Sleep Data Extract Location
+                            </td>
+                            <td>
+                                Folder used for sleep-position
+                                CSV data files.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Snapshot Location
+                            </td>
+                            <td>
+                                Folder used for saved snapshot images.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- CLASSIFICATION -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">
+                Sleep Position Classification
+            </h5>
+
+            <p>
+                Sleep Monitor uses MediaPipe body landmarks
+                and configurable thresholds to estimate the
+                current sleeping position.
+            </p>
+
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle">
+                    <thead>
+                        <tr>
+                            <th>Position</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td>
+                                Back
+                            </td>
+                            <td>
+                                The sleeper is lying face-up.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Left Side
+                            </td>
+                            <td>
+                                The sleeper is lying on their left side.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Right Side
+                            </td>
+                            <td>
+                                The sleeper is lying on their right side.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Stomach
+                            </td>
+                            <td>
+                                The sleeper is lying face-down.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Unknown
+                            </td>
+                            <td>
+                                A person is detected, but the
+                                available landmarks are not sufficient
+                                for a reliable classification.
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                No Person Detected
+                            </td>
+                            <td>
+                                MediaPipe could not detect a person
+                                in the current camera frame.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h6 class="mt-4">
+                Classification Thresholds
+            </h6>
+
+            <p class="text-muted">
+                These values can be changed from Configuration.
+                The defaults are:
+            </p>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Threshold</th>
+                            <th>Default</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td>
+                                Minimum Body Visibility
+                            </td>
+                            <td>
+                                0.45
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Side Position Shoulder Width
+                            </td>
+                            <td>
+                                0.12
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Side Position Hip Width
+                            </td>
+                            <td>
+                                0.10
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Back Position Face Visibility
+                            </td>
+                            <td>
+                                0.60
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Stomach Position Face Visibility
+                            </td>
+                            <td>
+                                0.35
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Landmark Visibility
+                            </td>
+                            <td>
+                                0.40
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="alert alert-warning mt-3 mb-0">
+                Changing classification thresholds can affect
+                classification results. Use the
+                <strong>Reset Classification Defaults</strong>
+                button in Setting to restore the original values.
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- CAPTURE -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">
+                Capture & Logging
+            </h5>
+
+            <p>
+                The Capture & Logging page is used to start
+                and stop overnight monitoring.
+            </p>
+
+            <p>
+                Before starting, enter a meaningful
+                <strong>Session Name</strong>. For example:
+            </p>
+
+            <div class="bg-light border rounded p-3 mb-3">
+                Shoaib_Night_01
+            </div>
+
+            <p>
+                While monitoring is running, Sleep Monitor:
+            </p>
+
+            <ul class="mb-0">
+                <li>
+                    captures video from the selected camera;
+                </li>
+
+                <li>
+                    detects body landmarks using MediaPipe;
+                </li>
+
+                <li>
+                    estimates the current sleeping position;
+                </li>
+
+                <li>
+                    stores sleep-position data in CSV format;
+                </li>
+
+                <li>
+                    saves video to the configured recording folder;
+                </li>
+
+                <li>
+                    saves snapshots using the selected interval; and
+                </li>
+
+                <li>
+                    displays live sleep-position statistics.
+                </li>
+            </ul>
+
+        </div>
+    </div>
+
+
+    <!-- ANALYSIS -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">
+                Analysis
+            </h5>
+
+            <p>
+                The Analysis page reads CSV files from the
+                configured Sleep Data Extract Location.
+            </p>
+
+            <p>
+                Select one session for detailed analysis,
+                or hold <strong>Ctrl</strong> while clicking
+                to select multiple sessions.
+            </p>
+
+            <p class="mb-0">
+                Sleep Monitor also attempts to match each CSV
+                session with a recording stored in the configured
+                Video Recording Location.
+            </p>
+
+        </div>
+    </div>
+
+
+    <!-- TROUBLESHOOTING -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+
+            <h5 class="mb-3">
+                Troubleshooting
+            </h5>
+
+            <div class="accordion" id="helpAccordion">
+
+                <div class="accordion-item">
+                    <h2
+                        class="accordion-header"
+                        id="cameraHeading"
+                    >
+                        <button
+                            class="accordion-button"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#cameraHelp"
+                        >
+                            Camera does not open
+                        </button>
+                    </h2>
+
+                    <div
+                        id="cameraHelp"
+                        class="accordion-collapse collapse show"
+                        data-bs-parent="#helpAccordion"
+                    >
+                        <div class="accordion-body">
+                            Check that the camera is connected,
+                            close other applications that may be
+                            using it, then select another camera
+                            from Configuration or Capture & Logging.
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="accordion-item">
+                    <h2
+                        class="accordion-header"
+                        id="sessionsHeading"
+                    >
+                        <button
+                            class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#sessionsHelp"
+                        >
+                            No sessions appear in Analysis
+                        </button>
+                    </h2>
+
+                    <div
+                        id="sessionsHelp"
+                        class="accordion-collapse collapse"
+                        data-bs-parent="#helpAccordion"
+                    >
+                        <div class="accordion-body">
+                            Open Configuration and confirm that
+                            the Sleep Data Extract Location points
+                            to the folder containing your CSV files.
+                            Save the configuration and reopen Analysis.
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="accordion-item">
+                    <h2
+                        class="accordion-header"
+                        id="videoHeading"
+                    >
+                        <button
+                            class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#videoHelp"
+                        >
+                            Session appears but no video is matched
+                        </button>
+                    </h2>
+
+                    <div
+                        id="videoHelp"
+                        class="accordion-collapse collapse"
+                        data-bs-parent="#helpAccordion"
+                    >
+                        <div class="accordion-body">
+                            Check that Video Recording Location
+                            points to the correct recordings folder.
+                            The recording and CSV should belong to
+                            the same session.
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="accordion-item">
+                    <h2
+                        class="accordion-header"
+                        id="unknownHeading"
+                    >
+                        <button
+                            class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#unknownHelp"
+                        >
+                            Too many results are Unknown
+                        </button>
+                    </h2>
+
+                    <div
+                        id="unknownHelp"
+                        class="accordion-collapse collapse"
+                        data-bs-parent="#helpAccordion"
+                    >
+                        <div class="accordion-body">
+                            Check camera positioning, lighting and
+                            whether the sleeper is visible. You can
+                            also test the classification thresholds
+                            under Configuration. Make small changes
+                            and validate the results before using
+                            the new settings.
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="accordion-item">
+                    <h2
+                        class="accordion-header"
+                        id="resetHeading"
+                    >
+                        <button
+                            class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#resetHelp"
+                        >
+                            Classification became worse after changing settings
+                        </button>
+                    </h2>
+
+                    <div
+                        id="resetHelp"
+                        class="accordion-collapse collapse"
+                        data-bs-parent="#helpAccordion"
+                    >
+                        <div class="accordion-body">
+                            Open Setting and click
+                            <strong>Reset Classification Defaults</strong>,
+                            then click <strong>Save Setting</strong>.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+
+<script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+>
+</script>
+
+</body>
+</html>
