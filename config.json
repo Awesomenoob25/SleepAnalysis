@@ -1,8 +1,8 @@
 {
     "camera_index": 0,
-    "recordings_folder": "C:\\Users\\HP\\OneDrive\\Documents\\ECU\\Applied Project\\SleepMonitor\\recordings",
-    "exports_folder": "C:\\Users\\HP\\OneDrive\\Documents\\ECU\\Applied Project\\SleepMonitor\\exports",
-    "snapshots_folder": "C:\\Users\\HP\\OneDrive\\Documents\\ECU\\Applied Project\\SleepMonitor\\snapshots",
+    "recordings_folder": "recordings",
+    "exports_folder": "exports",
+    "snapshots_folder": "snapshots",
     "snapshot_interval": 300,
     "classification": {
         "body_visibility_threshold": 0.45,
