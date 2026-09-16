@@ -1,366 +1,188 @@
-import csv
-from datetime import datetime
+import os
+import pandas as pd
 
-
-SLEEP_POSITIONS = [
-    "Back",
-    "Left Side",
-    "Right Side",
-    "Stomach",
-    "Unknown",
-    "No Person Detected"
-]
-
-
-def parse_timestamp(value):
-    """
-    Convert a CSV Timestamp value into a datetime.
-    Supports the format currently written by sleepmonitor.py
-    and a few common alternatives.
-    """
-
-    value = str(value).strip()
-
-    formats = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%d/%m/%Y %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S.%f"
-    ]
-
-    for timestamp_format in formats:
-        try:
-            return datetime.strptime(
-                value,
-                timestamp_format
-            )
-        except ValueError:
-            continue
-
-    raise ValueError(
-        f"Unsupported timestamp format: {value}"
-    )
-
-
+# Converts a given number of seconds into a human-readable string 
+# formatted as hours, minutes, and/or seconds (e.g. '2h 15m 30s')
+# Returns '0s' if the value is invalid, zero, or missing.
 def format_duration(seconds):
-    seconds = max(
-        0,
-        int(round(seconds))
+    if pd.isna(seconds) or seconds <= 0: return "0s"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0: return f"{h}h {m}m {s}s"
+    elif m > 0: return f"{m}m {s}s"
+    else: return f"{s}s"
+
+# Calculates a custom fortnight label
+def get_fortnight(dt):
+    week_num = dt.isocalendar().week
+    fortnight_num = ((week_num - 1) // 2) + 1
+    return f"{dt.year} - Fortnight {fortnight_num}"
+
+# Reads the list of selected session CSV filepaths, cleans and normalizes the data
+# Computes multi-night metrics across the timeframes (Daily, Weekly, etc)
+# Returns the dictionaries: (period_data, global_data)
+def perform_analysis(filepaths):
+    dfs = []
+
+    # Loop through each provided file path
+    for filepath in filepaths:
+        if os.path.exists(filepath):
+            df = pd.read_csv(filepath, skip_blank_lines=True)
+            
+            # Clean column headers
+            df.columns = df.columns.str.strip()
+            
+            # Identify the timestamp column, handling the shifted column layout
+            time_col = "Timestamp"
+            if time_col in df.columns and df[time_col].isnull().all():
+                time_idx = df.columns.get_loc(time_col)
+                if time_idx + 1 < len(df.columns):
+                    time_col = df.columns[time_idx + 1]
+            
+            # Extract only the active timestamp and position columns
+            df = df[[time_col, "Position"]].copy()
+            df.columns = ["Timestamp", "Position"]
+            dfs.append(df)
+    
+    # Raise an exception if no readable data was found
+    if not dfs:
+        raise ValueError("No valid data found in selected files.")
+
+    # Combine all individual session dataframes into one large dataframe
+    master_df = pd.concat(dfs, ignore_index=True)
+    
+    # Cleans 'Timestamp' column into proper datetime objects
+    master_df["Timestamp"] = pd.to_datetime(
+        master_df["Timestamp"].astype(str).str.replace(r'\[.*?\]', '', regex=True).str.strip(), 
+        dayfirst=True, format='mixed'
     )
+    master_df["Position"] = master_df["Position"].astype(str).str.strip()
+    
+    # Drop rows with missing values and filter out duplicate entries based on timestamp and position
+    master_df = master_df.dropna(subset=['Timestamp', 'Position'])
+    master_df = master_df.drop_duplicates(subset=["Timestamp", "Position"]).sort_values('Timestamp').reset_index(drop=True)
 
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    remaining_seconds = seconds % 60
+    # If no valid data remains after cleaning, raise an exception
+    if master_df.empty:
+        raise ValueError("Uploaded files contained no readable data.")
 
-    return (
-        f"{hours:02d}:"
-        f"{minutes:02d}:"
-        f"{remaining_seconds:02d}"
-    )
+    # --- 2. NIGHT CALCULATION LOGIC ---
+    master_df["Logical_Date"] = (master_df["Timestamp"] - pd.Timedelta(hours=12)).dt.date
+    
+    # Find the earliest timestamp for each night to establish when the session began
+    night_Timestamps = master_df.groupby("Logical_Date")["Timestamp"].transform('min')
+    master_df["Night_Timestamp"] = night_Timestamps
+    master_df["Night_ID"] = master_df["Logical_Date"].astype(str)
 
+    # Sort chronologically by Night ID and Timestamp time to properly sequence tracking blocks
+    master_df = master_df.sort_values(["Night_ID", "Timestamp"])
 
-def analyse_csv(csv_path):
-    """
-    Analyse one Sleep Monitor CSV session.
+    # Flag row entries where a positional shift occurred compared to the previous row (restricted within the same night)
+    master_df["Is_Change"] = (master_df["Position"] != master_df["Position"].shift(1)) & (master_df["Night_ID"] == master_df["Night_ID"].shift(1))
 
-    Duration is calculated from the time between
-    consecutive CSV rows.
+    # Calculate the duration (in seconds) for each position block based on the time until the next entry
+    master_df["End"] = master_df.groupby("Night_ID")["Timestamp"].shift(-1)
+    master_df["End"] = master_df["End"].fillna(master_df["Timestamp"] + pd.Timedelta(seconds=60))
+    master_df["Duration_Sec"] = (master_df["End"] - master_df["Timestamp"]).dt.total_seconds()
 
-    The final CSV row written when a session stops
-    gives the end time for new recordings.
-    """
+    # Assigns each row to various time period labels for aggregation
+    master_df["Daily"] = master_df["Night_ID"]
+    master_df["Weekly"] = master_df["Night_Timestamp"].dt.to_period('W-MON').dt.to_timestamp().dt.strftime('Week %Y-%m-%d')
+    master_df["Fortnightly"] = master_df["Night_Timestamp"].apply(get_fortnight)
+    master_df["Monthly"] = master_df["Night_Timestamp"].dt.strftime('%Y-%m (Month)')
+    master_df["Quarterly"] = master_df["Night_Timestamp"].dt.to_period('Q').dt.strftime('%Y-Q%q')
+    master_df["Yearly"] = master_df["Night_Timestamp"].dt.strftime('%Y (Year)')
 
-    records = []
+    periods = ["Daily", "Weekly", "Fortnightly", "Monthly", "Quarterly", "Yearly"]
+    period_data = {}
 
-    with open(
-        csv_path,
-        "r",
-        newline="",
-        encoding="utf-8-sig"
-    ) as csv_file:
+    # Generates statistical breakdowns for each timeframe category
+    for p in periods:
+        period_data[p] = {}
+        p_totals = master_df.groupby(p)["Duration_Sec"].sum()
+        p_nights = master_df.groupby(p)["Night_ID"].nunique()
+        p_changes = master_df.groupby(p)["Is_Change"].sum() 
+        p_group = master_df.groupby([p, "Position"])["Duration_Sec"].sum().reset_index()
 
-        reader = csv.DictReader(
-            csv_file
-        )
+        for period_label, total_sec in p_totals.items():
+            nights_count = int(p_nights[period_label])
+            
+            # Sort positions within this specific period group from highest duration to lowest
+            pos_data = p_group[p_group[p] == period_label].sort_values(by="Duration_Sec", ascending=False)
+            pos_dict = {}
+            for _, row in pos_data.iterrows():
+                pos = row["Position"]
+                sec = row["Duration_Sec"]
+                pos_dict[pos] = {
+                    "Sec": float(sec),
+                    "Str": format_duration(sec),
+                    "Pct": round((sec / total_sec * 100), 1) if total_sec > 0 else 0
+                }
 
-        if reader.fieldnames is None:
-            raise ValueError(
-                "The selected CSV file has no header."
-            )
+            sleep_positions = {k: v for k, v in pos_dict.items() if k != "No Person Detected"}
+            dominant_pos = max(sleep_positions, key=lambda k: sleep_positions[k]["Sec"]) if sleep_positions else "None"
 
-        required_columns = {
-            "Timestamp",
-            "Position"
+            period_data[p][period_label] = {
+                "Total_Time_Sec": float(total_sec),
+                "Total_Time_Str": format_duration(total_sec),
+                "Total_Hours": format_duration(total_sec),
+                "Average_Time_Str": format_duration(total_sec / nights_count) if nights_count > 0 else "0s",
+                "Nights": nights_count,
+                "Position_Changes": int(p_changes.get(period_label, 0)),
+                "Dominant_Position": dominant_pos,
+                "Positions": pos_dict
+            }
+
+    global_total = master_df["Duration_Sec"].sum()
+    global_nights = master_df["Night_ID"].nunique()
+    global_changes = master_df["Is_Change"].sum()
+    
+    global_pos = master_df.groupby("Position")["Duration_Sec"].sum().sort_values(ascending=False)
+    
+    global_pos_dict = {}
+    for pos, sec in global_pos.items():
+        global_pos_dict[pos] = {
+            "Sec": float(sec),
+            "Str": format_duration(sec),
+            "Pct": round((sec / global_total * 100), 1) if global_total > 0 else 0
         }
 
-        missing_columns = (
-            required_columns
-            - set(reader.fieldnames)
-        )
-
-        if missing_columns:
-            raise ValueError(
-                "The CSV file is missing required columns: "
-                + ", ".join(
-                    sorted(missing_columns)
-                )
-            )
-
-        for row in reader:
-
-            timestamp_text = (
-                row.get("Timestamp", "")
-                or ""
-            ).strip()
-
-            position = (
-                row.get("Position", "")
-                or "Unknown"
-            ).strip()
-
-            if not timestamp_text:
-                continue
-
-            try:
-                timestamp = parse_timestamp(
-                    timestamp_text
-                )
-            except ValueError:
-                continue
-
-            if not position:
-                position = "Unknown"
-
-            records.append({
-                "timestamp": timestamp,
-                "position": position
-            })
-
-    if not records:
-        raise ValueError(
-            "No valid sleep-position records were found in the CSV file."
-        )
-
-    records.sort(
-        key=lambda item:
-            item["timestamp"]
-    )
-
-    position_seconds = {
-        position: 0.0
-        for position in SLEEP_POSITIONS
+    global_data = {
+        "Total_Time_Str": format_duration(global_total),
+        "Total_Hours": format_duration(global_total),
+        "Total_Nights": int(global_nights),
+        "Total_Changes": int(global_changes),
+        "Average_Night_Str": format_duration(global_total / global_nights) if global_nights > 0 else "0s",
+        "Average_Changes": round(float(global_changes) / global_nights, 1) if global_nights > 0 else 0,
+        "Positions": global_pos_dict
     }
 
-    # Preserve any unexpected future classifications.
-    for record in records:
-        if (
-            record["position"]
-            not in position_seconds
-        ):
-            position_seconds[
-                record["position"]
-            ] = 0.0
-
-    total_seconds = 0.0
-
-    # Every row describes the position that remains active
-    # until the next logged timestamp.
-    for index in range(
-        len(records) - 1
-    ):
-
-        current_record = records[index]
-        next_record = records[index + 1]
-
-        duration_seconds = (
-            next_record["timestamp"]
-            - current_record["timestamp"]
-        ).total_seconds()
-
-        if duration_seconds < 0:
-            continue
-
-        position = current_record[
-            "position"
-        ]
-
-        position_seconds[
-            position
-        ] = (
-            position_seconds.get(
-                position,
-                0.0
-            )
-            + duration_seconds
-        )
-
-        total_seconds += (
-            duration_seconds
-        )
-
-    # Count only genuine changes in classification.
-    position_changes = 0
-
-    for index in range(
-        1,
-        len(records)
-    ):
-
-        if (
-            records[index]["position"]
-            != records[index - 1]["position"]
-        ):
-            position_changes += 1
-
-    no_person_seconds = (
-        position_seconds.get(
-            "No Person Detected",
-            0.0
-        )
-    )
-
-    # "Total hours slept" excludes periods where
-    # no person was detected.
-    sleep_seconds = max(
-        0.0,
-        total_seconds
-        - no_person_seconds
-    )
-
-    breakdown = []
-
-    for position, seconds in (
-        position_seconds.items()
-    ):
-
-        if total_seconds > 0:
-            percentage = (
-                seconds
-                / total_seconds
-            ) * 100
-        else:
-            percentage = 0.0
-
-        breakdown.append({
-            "position": position,
-            "seconds": round(
-                seconds,
-                1
-            ),
-            "hours": round(
-                seconds / 3600,
-                2
-            ),
-            "duration": format_duration(
-                seconds
-            ),
-            "percentage": round(
-                percentage,
-                1
-            )
-        })
-
-    position_order = {
-        position: index
-        for index, position
-        in enumerate(
-            SLEEP_POSITIONS
-        )
-    }
-
-    breakdown.sort(
-        key=lambda item: (
-            position_order.get(
-                item["position"],
-                999
-            )
-        )
-    )
-
-    valid_sleep_positions = [
-        item
-        for item in breakdown
-        if item["position"]
-        not in {
-            "No Person Detected"
+    return period_data, global_data
+    # Computes metrics
+    global_total = master_df["Duration_Sec"].sum()
+    global_nights = master_df["Night_ID"].nunique()
+    global_changes = master_df["Is_Change"].sum()
+    
+    # Aggregate all time positions and sort them by total duration
+    global_pos = master_df.groupby("Position")["Duration_Sec"].sum().sort_values(ascending=False)
+    
+    global_pos_dict = {}
+    for pos, sec in global_pos.items():
+        global_pos_dict[pos] = {
+            "Sec": float(sec),
+            "Str": format_duration(sec),
+            "Pct": round((sec / global_total * 100), 1) if global_total > 0 else 0
         }
-    ]
 
-    dominant_position = None
-
-    if valid_sleep_positions:
-
-        dominant = max(
-            valid_sleep_positions,
-            key=lambda item:
-                item["seconds"]
-        )
-
-        if dominant["seconds"] > 0:
-            dominant_position = (
-                dominant["position"]
-            )
-
-    return {
-        "start_time":
-            records[0][
-                "timestamp"
-            ].strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-
-        "end_time":
-            records[-1][
-                "timestamp"
-            ].strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-
-        "total_seconds":
-            round(
-                total_seconds,
-                1
-            ),
-
-        "total_hours":
-            round(
-                total_seconds / 3600,
-                2
-            ),
-
-        "total_duration":
-            format_duration(
-                total_seconds
-            ),
-
-        "sleep_seconds":
-            round(
-                sleep_seconds,
-                1
-            ),
-
-        "sleep_hours":
-            round(
-                sleep_seconds / 3600,
-                2
-            ),
-
-        "sleep_duration":
-            format_duration(
-                sleep_seconds
-            ),
-
-        "position_changes":
-            position_changes,
-
-        "dominant_position":
-            dominant_position
-            or "N/A",
-
-        "breakdown":
-            breakdown,
-
-        "record_count":
-            len(records)
+    # Package statistics for export
+    global_data = {
+        "Total_Time_Str": format_duration(global_total),
+        "Total_Hours": format_duration(global_total),
+        "Total_Nights": int(global_nights),
+        "Total_Changes": int(global_changes),
+        "Average_Night_Str": format_duration(global_total / global_nights) if global_nights > 0 else "0s",
+        "Average_Changes": round(float(global_changes) / global_nights, 1) if global_nights > 0 else 0,
+        "Positions": global_pos_dict
     }
+
+    return period_data, global_data

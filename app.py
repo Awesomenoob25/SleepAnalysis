@@ -13,24 +13,12 @@ import cv2
 import json
 import os
 import subprocess
-
-from analysis import analyse_csv
-
-from record_webcam import (
-    get_frame,
-    set_camera,
-    start_recording,
-    stop_recording,
-    set_output_folders
-)
-
-from sleepmonitor import (
-    start_session_statistics,
-    stop_session_statistics,
-    get_position_counts,
-    set_export_folder,
-    set_classification_settings
-)
+import pandas as pd
+import re
+from analysis import perform_analysis  # Analysis Module
+from manualreview import (perform_individual_analysis, get_review_items, update_csv_label, get_all_snapshots)  # Manual Review Module
+from record_webcam import (get_frame, set_camera, start_recording, stop_recording, set_output_folders)
+from sleepmonitor import (start_session_statistics, stop_session_statistics, get_position_counts, set_export_folder, set_classification_settings)
 
 app = Flask(__name__)
 
@@ -53,7 +41,6 @@ DEFAULT_CONFIG = {
     }
 }
 
-
 def normalise_folder(path_value, fallback):
     value = str(path_value or "").strip()
     if not value:
@@ -62,7 +49,6 @@ def normalise_folder(path_value, fallback):
     if not os.path.isabs(value):
         value = os.path.join(BASE_DIR, value)
     return os.path.abspath(value)
-
 
 def load_config():
     config = DEFAULT_CONFIG.copy()
@@ -107,11 +93,9 @@ def load_config():
     )
     return config
 
-
 def save_config(config):
     with open(CONFIG_FILE, "w", encoding="utf-8") as config_file:
         json.dump(config, config_file, indent=4)
-
 
 def apply_config(config=None):
     if config is None:
@@ -130,9 +114,7 @@ def apply_config(config=None):
 
     return config
 
-
 apply_config()
-
 
 def detect_cameras(max_cameras=10):
     available_cameras = []
@@ -179,7 +161,6 @@ def configuration():
                     value = float(request.form.get(name, default_value))
                 except (TypeError, ValueError):
                     value = default_value
-
                 return max(0.0, min(1.0, value))
 
             new_config = {
@@ -198,30 +179,12 @@ def configuration():
                 ),
                 "snapshot_interval": snapshot_interval,
                 "classification": {
-                    "body_visibility_threshold": form_float(
-                        "body_visibility_threshold",
-                        0.45
-                    ),
-                    "side_shoulder_width": form_float(
-                        "side_shoulder_width",
-                        0.12
-                    ),
-                    "side_hip_width": form_float(
-                        "side_hip_width",
-                        0.10
-                    ),
-                    "back_face_visibility": form_float(
-                        "back_face_visibility",
-                        0.60
-                    ),
-                    "stomach_face_visibility": form_float(
-                        "stomach_face_visibility",
-                        0.35
-                    ),
-                    "landmark_visibility_threshold": form_float(
-                        "landmark_visibility_threshold",
-                        0.40
-                    )
+                    "body_visibility_threshold": form_float("body_visibility_threshold", 0.45),
+                    "side_shoulder_width": form_float("side_shoulder_width", 0.12),
+                    "side_hip_width": form_float("side_hip_width", 0.10),
+                    "back_face_visibility": form_float("back_face_visibility", 0.60),
+                    "stomach_face_visibility": form_float("stomach_face_visibility", 0.35),
+                    "landmark_visibility_threshold": form_float("landmark_visibility_threshold", 0.40)
                 }
             }
 
@@ -288,11 +251,15 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 
 
 def get_saved_sessions():
+    # Discovers and catalogs completed session CSVs, matching video recordings and snapshot folders.
     config = load_config()
     exports_folder = config["exports_folder"]
     recordings_folder = config["recordings_folder"]
+    snapshots_folder = config["snapshots_folder"]
+    
     os.makedirs(exports_folder, exist_ok=True)
     os.makedirs(recordings_folder, exist_ok=True)
+    os.makedirs(snapshots_folder, exist_ok=True)
     sessions = []
 
     try:
@@ -309,38 +276,36 @@ def get_saved_sessions():
         video_filename = None
         video_path = None
 
-        for extension in [".mp4", ".avi", ".mov", ".webm"]:
-            possible_video = session_name + extension
-            possible_video_path = os.path.join(recordings_folder, possible_video)
-            if os.path.exists(possible_video_path):
-                video_filename = possible_video
-                video_path = possible_video_path
-                break
+        # Strip the last 2 digits as can cause issues if too specific
+        if re.search(r'_\d{6}$', session_name):
+            search_prefix = session_name[:-2]
+        else:
+            search_prefix = session_name
 
-        if video_filename is None:
-            try:
-                video_files = os.listdir(recordings_folder)
-            except OSError:
-                video_files = []
+        # Search the recordings folder for a matching video file using the prefix
+        if os.path.exists(recordings_folder):
+            for filename in os.listdir(recordings_folder):
+                if filename.startswith(search_prefix) and filename.lower().endswith(('.mp4', '.avi', '.mov', '.webm')):
+                    video_filename = filename
+                    video_path = os.path.join(recordings_folder, filename)
+                    break
 
-            prefix_parts = session_name.rsplit("_", 2)
-            session_prefix = prefix_parts[0] if len(prefix_parts) == 3 else session_name
-            matching_videos = []
-
-            for filename in video_files:
-                if not filename.lower().endswith((".avi", ".mp4", ".mov", ".webm")):
-                    continue
-                if filename.startswith(session_prefix + "_"):
-                    full_path = os.path.join(recordings_folder, filename)
-                    matching_videos.append((
-                        abs(os.path.getmtime(full_path) - os.path.getmtime(csv_path)),
-                        filename,
-                        full_path
-                    ))
-
-            if matching_videos:
-                matching_videos.sort(key=lambda item: item[0])
-                _, video_filename, video_path = matching_videos[0]
+        # Check for snapshot folders using the same prefix logic
+        has_snapshots = False
+        if os.path.exists(snapshots_folder):
+            for item in os.listdir(snapshots_folder):
+                item_full_path = os.path.join(snapshots_folder, item)
+                if os.path.isdir(item_full_path) and item.startswith(search_prefix):
+                    try:
+                        images_in_dir = [
+                            f for f in os.listdir(item_full_path) 
+                            if f.lower().startswith('snapshot_') and f.lower().endswith(('.png', '.jpg', '.jpeg'))
+                        ]
+                        if images_in_dir:
+                            has_snapshots = True
+                            break
+                    except OSError:
+                        pass
 
         try:
             modified_time = os.path.getmtime(csv_path)
@@ -353,75 +318,138 @@ def get_saved_sessions():
             "csv_path": csv_path,
             "video_filename": video_filename,
             "video_path": video_path,
+            "has_video": video_filename is not None,
+            "has_snapshots": has_snapshots,
             "modified_time": modified_time
         })
 
     sessions.sort(key=lambda session: session["modified_time"], reverse=True)
     return sessions
 
+# -----------------------------------------------------------------------
+# Multi-Night Analysis Route
+# -----------------------------------------------------------------------
+@app.route("/analysis", methods=["GET", "POST"])
+def analysis():
+    # Handles multi-night sleep analytics and trend reporting
+    config = load_config()
+    sessions = get_saved_sessions()
+    
+    error = None
+    has_data = False
+    global_data = {}
+    period_data = {}
+    selected_sessions = []
+
+    if request.method == "POST":
+        selected_sessions = request.form.getlist("selected_sessions")
+        
+        if not selected_sessions:
+            error = "Please select at least one sleep session."
+        else:
+            try:
+                available_sessions = {session["name"]: session for session in sessions}
+                filepaths = []
+                
+                # Collect filepaths for selected sessions
+                for session_name in selected_sessions:
+                    session = available_sessions.get(session_name)
+                    if session is not None:
+                        filepaths.append(session["csv_path"])
+                
+                # Perform multi-night trend analysis
+                period_data, global_data = perform_analysis(filepaths)
+                has_data = True
+
+            except Exception as exception:
+                error = f"Error processing files: {str(exception)}"
+
+    return render_template(
+        "analysis.html",
+        has_data=has_data,
+        global_data=global_data,
+        period_data=period_data,
+        sessions=sessions,
+        selected_sessions=selected_sessions,
+        exports_folder=config["exports_folder"],
+        recordings_folder=config["recordings_folder"],
+        error=error
+    )
+
+# -----------------------------------------------------------------------
+# Manual Review Route
+# -----------------------------------------------------------------------
+@app.route('/manualreview', methods=['GET', 'POST'])
+def individual_analysis():
+    # Handles single-session review, video/snapshot playback and AI verification tools
+    config = load_config()
+    sessions = get_saved_sessions()
+    
+    selected_session = None
+    has_data = False
+    individual_stats = {}
+    selected_video = None
+    pie_chart_data = {}  
+    review_items = []
+    all_snapshots = [] 
+    error = None
+
+    if request.method == 'POST':
+        selected_session = request.form.get('selected_session')
+        
+        if selected_session:
+            session_obj = next((s for s in sessions if s["name"] == selected_session), None)
+            
+            if session_obj:
+                csv_path = session_obj.get("csv_path")
+                recordings_dir = config.get("recordings_folder", "recordings")
+                
+                # Match video file to selected session 
+                if re.search(r'_\d{6}$', selected_session):
+                    search_prefix = selected_session[:-2]
+                else:
+                    search_prefix = selected_session
+                
+                if os.path.exists(recordings_dir):
+                    for filename in os.listdir(recordings_dir):
+                        if filename.startswith(search_prefix) and filename.lower().endswith(('.mp4', '.avi', '.webm')):
+                            selected_video = filename
+                            break
+
+                if os.path.exists(csv_path):
+                    individual_stats, pie_chart_data, error = perform_individual_analysis(csv_path)
+                    
+                    if error is None:
+                        has_data = True
+                        review_items = get_review_items(selected_session, csv_path, config["snapshots_folder"])
+                        all_snapshots = get_all_snapshots(selected_session, config["snapshots_folder"])
+                else:
+                    error = "Could not locate the CSV data file for this session."
+                    
+    return render_template(
+        'manualreview.html',
+        sessions=sessions,
+        selected_session=selected_session,
+        has_data=has_data,
+        individual_stats=individual_stats,
+        selected_video=selected_video,
+        pie_chart_data=pie_chart_data,
+        review_items=review_items,
+        all_snapshots=all_snapshots, 
+        exports_folder=config.get("exports_folder", "exports"),
+        error=error
+    )
 
 
 @app.route("/help")
 def help_page():
-    return render_template(
-        "help.html"
-    )
-
-
-@app.route("/analysis", methods=["GET", "POST"])
-def analysis():
-    config = load_config()
-    sessions = get_saved_sessions()
-    results = None
-    comparison_results = []
-    error = None
-    selected_sessions = []
-
-    if request.method == "POST":
-        try:
-            selected_sessions = request.form.getlist("selected_sessions")
-            if not selected_sessions:
-                raise ValueError("Please select at least one sleep session.")
-
-            available_sessions = {session["name"]: session for session in sessions}
-            for session_name in selected_sessions:
-                session = available_sessions.get(session_name)
-                if session is None:
-                    continue
-                session_results = analyse_csv(session["csv_path"])
-                comparison_results.append({
-                    "session_name": session_name,
-                    "csv_filename": session["csv_filename"],
-                    "video_filename": session["video_filename"],
-                    "results": session_results
-                })
-
-            if not comparison_results:
-                raise ValueError("The selected session files could not be analysed.")
-
-            if len(comparison_results) == 1:
-                results = comparison_results[0]["results"]
-
-        except Exception as exception:
-            error = str(exception)
-
-    return render_template(
-        "analysis.html",
-        sessions=sessions,
-        selected_sessions=selected_sessions,
-        results=results,
-        comparison_results=comparison_results,
-        error=error,
-        exports_folder=config["exports_folder"],
-        recordings_folder=config["recordings_folder"]
-    )
+    return render_template("help.html")
 
 
 @app.route("/recordings/<path:filename>")
 def recording_file(filename):
     config = load_config()
     return send_from_directory(config["recordings_folder"], filename)
-
 
 def generate_frames(camera_index):
     set_camera(camera_index)
@@ -440,7 +468,6 @@ def generate_frames(camera_index):
             + b"\r\n"
         )
 
-
 @app.route("/video_feed")
 def video_feed():
     config = load_config()
@@ -454,7 +481,6 @@ def video_feed():
         mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
-
 @app.route("/select_camera", methods=["POST"])
 def select_camera():
     config = load_config()
@@ -467,7 +493,6 @@ def select_camera():
         "status": "error",
         "message": "Unable to open selected camera."
     }), 400
-
 
 @app.route("/start_recording", methods=["POST"])
 def start():
@@ -512,7 +537,6 @@ def start():
         print("Start recording error:", error)
         return jsonify({"status": "error", "message": str(error)}), 500
 
-
 @app.route("/stop_recording", methods=["POST"])
 def stop():
     try:
@@ -522,11 +546,44 @@ def stop():
     except Exception as error:
         return jsonify({"status": "error", "message": str(error)}), 500
 
-
 @app.route("/position_stats")
 def position_stats():
     return jsonify(get_position_counts())
 
 
+@app.route('/snapshots/<path:filename>')
+def serve_snapshots(filename):
+    config = load_config()
+    return send_from_directory(config["snapshots_folder"], filename)
+
+
+@app.route('/api/update_label', methods=['POST'])
+def update_label():
+    data = request.get_json()
+    
+    timestamp = data.get('time')  
+    new_label = data.get('label')
+    session_name = data.get('session')
+    
+    if not timestamp or not new_label or not session_name:
+        return jsonify({"success": False, "error": "Missing data"}), 400
+        
+    sessions = get_saved_sessions()
+    session_obj = next((s for s in sessions if s["name"] == session_name), None)
+    if not session_obj:
+        return jsonify({"success": False, "error": "Session not found"}), 404
+        
+    csv_path = session_obj.get("csv_path")
+    
+    success, error_msg = update_csv_label(csv_path, timestamp, new_label)
+    
+    if success:
+        return jsonify({"success": True})
+    else:
+        return jsonify({"success": False, "error": error_msg}), 500
+
+# -----------------------------------------------------------------------
+# FLASK SERVER START
+# -----------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
