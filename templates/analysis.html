@@ -2,546 +2,429 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sleep Monitor - Analysis</title>
 
-    <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-    >
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='css/style.css') }}"
-    >
+    <!--
+        PAGE-SPECIFIC STYLES
+        For the navigation tabs used in the timeframe selector.
+        This makes unselected tabs have a gray border and the active tab uses the primary blue colour
+    -->
+    <style>
+        .nav-pills .nav-link {
+            cursor: pointer;
+            border: 1px solid #dee2e6;
+            margin-right: 5px;
+            color: #495057;
+        }
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-
+            .nav-pills .nav-link.active {
+                background-color: #0d6efd;
+                color: white;
+                border-color: #0d6efd;
+            }
+    </style>
 </head>
 
 <body>
-
-<nav class="navbar navbar-dark bg-dark px-4">
-    <span class="navbar-brand">
-        Sleep Monitor
-    </span>
-
-    <div>
-        <a
-            href="/"
-            class="btn btn-outline-light"
-        >
-            Capture & Logging
-        </a>
-
-        <a
-            href="/analysis"
-            class="btn btn-primary"
-        >
-            Analysis
-        </a>
-
-        <a
-            href="/configuration"
-            class="btn btn-outline-light"
-        >
-            Configuration
-        </a>
-
-        <a
-            href="/help"
-            class="btn btn-outline-light"
-        >
-            Help
-        </a>
-    </div>
-</nav>
-
-
-<div class="container mt-4 mb-5">
-
-    <div class="mb-3">
-        <h2>
-            Sleep Analysis
-        </h2>
-
-        <p class="text-muted">
-            Select one session for detailed analysis
-            or select multiple sessions to compare several nights.
-        </p>
-    </div>
-
-
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-
-            <div
-                class="d-flex justify-content-between align-items-start flex-wrap gap-3"
-            >
-                <div>
-                    <h5>
-                        Select Sleep Sessions
-                    </h5>
-
-                    <p class="text-muted mb-2">
-                        Hold <strong>Ctrl</strong> while clicking
-                        to select multiple sessions.
-                    </p>
-
-                    <div class="small text-muted">
-                        Sleep data:
-                        {{ exports_folder }}
-                    </div>
-
-                    <div class="small text-muted">
-                        Recordings:
-                        {{ recordings_folder }}
-                    </div>
-                </div>
-
-                <a
-                    href="/configuration"
-                    class="btn btn-outline-secondary"
-                >
-                    Change Data Locations
-                </a>
-            </div>
-
-
-            <form
-                method="POST"
-                class="mt-3"
-            >
-
-                {% if sessions %}
-
-                    <select
-                        name="selected_sessions"
-                        class="form-select"
-                        multiple
-                        size="7"
-                        required
-                    >
-
-                        {% for session in sessions %}
-
-                            <option
-                                value="{{ session.name }}"
-                                {% if session.name in selected_sessions %}
-                                    selected
-                                {% endif %}
-                            >
-                                {{ session.name }}
-                                -
-                                {% if session.video_filename %}
-                                    Video available
-                                {% else %}
-                                    CSV only
-                                {% endif %}
-                            </option>
-
-                        {% endfor %}
-
-                    </select>
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary mt-3"
-                    >
-                        Analyse Selected Sessions
-                    </button>
-
-                {% else %}
-
-                    <div class="alert alert-warning mt-3 mb-0">
-                        No sleep sessions were found in the configured
-                        Sleep Data Extract location.
-                        Open Configuration and check the folder path.
-                    </div>
-
-                {% endif %}
-
-            </form>
-
+    <nav class="navbar navbar-dark bg-dark px-4">
+        <span class="navbar-brand">
+            Sleep Monitor
+        </span>
+        <div>
+            <a href="/" class="btn btn-outline-light">Capture & Logging</a>
+            <a href="/analysis" class="btn btn-primary">Analysis</a>
+            <a href="/manualreview" class="btn btn-outline-light">Manual Review</a>
+            <a href="/configuration" class="btn btn-outline-light">Setting</a>
+            <a href="/help" class="btn btn-outline-light">Help</a>
         </div>
-    </div>
+    </nav>
 
+    <div class="container mt-4 mb-5">
 
-    {% if error %}
+        <div class="mb-4">
+            <h2>Sleep Analysis</h2>
+            <p class="text-muted">
+                Trends across daily, weekly, fortnightly, monthly, quarterly and annual timeframes.
+            </p>
+        </div>
 
-        <div class="alert alert-danger">
+        
+        {% if error %}
+        <div class="alert alert-danger shadow-sm mb-4">
             {{ error }}
         </div>
+        {% endif %}
 
-    {% endif %}
-
-
-    {% if comparison_results %}
-
-    {% if comparison_results|length > 1 %}
-
+        
+        {% if not has_data %}
         <div class="card shadow-sm mb-4">
             <div class="card-body">
-
-                <div class="mb-3">
-                    <h4 class="mb-1">
-                        Multi-Session Sleep Position Comparison
-                    </h4>
-
-                    <p class="text-muted mb-0">
-                        Compare the percentage of monitored time spent
-                        in each sleep position across the selected sessions.
-                    </p>
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5>Select Sleep Sessions</h5>
+                        <p class="text-muted mb-2">
+                            Hold <strong>Ctrl</strong> while clicking to select multiple sessions.
+                        </p>
+                        <div class="small text-muted">
+                            Sleep data: {{ exports_folder }}
+                        </div>
+                        <div class="small text-muted">
+                            Recordings: {{ recordings_folder }}
+                        </div>
+                    </div>
+                    <a href="/configuration" class="btn btn-outline-secondary">
+                        Change Data Locations
+                    </a>
                 </div>
 
-                <div style="height: 430px;">
-                    <canvas id="comparisonChart"></canvas>
+                <!--
+                    SELECTION FORM
+                    Uses a multi-select box to allow users to combine multiple nights into one analysis
+                -->
+                <form method="POST" class="mt-3">
+                    {% if sessions %}
+                    <select name="selected_sessions" class="form-select" multiple size="7" required>
+                        <!-- Loop through available sessions passed from the backend -->
+                        {% for session in sessions %}
+                        <option value="{{ session.name }}" {% if session.name in selected_sessions %}selected{% endif %}>
+                            {{ session.name }} - {% if session.video_filename %}Video available{% else %}CSV only{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    <button type="submit" class="btn btn-primary mt-3 fw-bold w-100">
+                        Analyse Selected Sessions
+                    </button>
+                    {% else %}
+                    <!-- Message if the directory is completely empty -->
+                    <div class="alert alert-warning mt-3 mb-0">
+                        No sleep sessions were found in the configured Sleep Data Extract location. Open Settings and check the folder path.
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- --------------------------------------------------
+        DASHBOARD SCREEN (State 2: Data Loaded)
+        This block renders when the backend has successfully analysed the daya 'has_data'
+        --------------------------------------------------- -->
+        {% if has_data %}
+
+        <!-- Back button to reset the view and pick different files -->
+        <div class="mb-4 d-flex justify-content-end">
+            <a href="/analysis" class="btn btn-outline-secondary btn-sm">
+                &larr; Select Different Sessions
+            </a>
+        </div>
+
+        <!-- --------------------------------------------------
+        GLOBAL SUMMARY ROW
+        Displays the high-level totals across ALL selected sessions combined
+        --------------------------------------------------- -->
+        <div class="card shadow-sm mb-4 border-top-0" style="border-top: 4px solid #0d6efd !important;">
+            <div class="card-body">
+
+                <h5 class="mb-4 text-center">
+                    All-Time Summary & Position Breakdown
+                </h5>
+
+                <div class="row text-center mb-4 justify-content-center">
+
+                    <div class="col-md-4 mb-3">
+                        <div class="text-muted text-uppercase mb-1 fw-bold small">Nights Slept</div>
+                        <div class="display-6 fw-semibold">{{ global_data.Total_Nights }}</div>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <div class="text-muted text-uppercase mb-1 fw-bold small">Total Hours Recorded</div>
+                        <div class="display-6 fw-semibold">{{ global_data.Total_Hours }}</div>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <div class="text-muted text-uppercase mb-1 fw-bold small">Total Position Changes</div>
+                        <div class="display-6 fw-semibold">{{ global_data.Total_Changes }}</div>
+                    </div>
+
+                    <div class="col-md-4 mb-3 mb-md-0">
+                        <div class="text-muted text-uppercase mb-1 fw-bold small">Avg. Length of Session</div>
+                        <div class="display-6 fw-semibold">{{ global_data.Average_Night_Str }}</div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="text-muted text-uppercase mb-1 fw-bold small">Avg. Positions Changed</div>
+                        <div class="display-6 fw-semibold">{{ global_data.Average_Changes }}</div>
+                    </div>
                 </div>
 
-                <div class="small text-muted mt-3">
-                    Each group represents one selected session.
-                    Values are percentages of the total monitored time.
-                </div>
+                <hr class="my-4">
 
+                <!--
+                    GLOBAL POSITION BREAKDOWN
+                    Loops over the global positions dictionary and displays the percentage and time
+                    spent in every recorded position
+                -->
+                <div class="row text-center g-3">
+                    {% for pos, metrics in global_data.Positions.items() %}
+                    <div class="col-6 col-md-3">
+                        <div class="fw-bold text-dark">{{ pos }}</div>
+                        <div class="fs-4 text-primary">{{ metrics.Pct }}%</div>
+                        <div class="small text-muted">{{ metrics.Str }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
 
-    {% endif %}
-
-
-        {% for session in comparison_results %}
-
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-
-                    <div
-                        class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3"
-                    >
-                        <div>
-                            <h4 class="mb-1">
-                                {{ session.session_name }}
-                            </h4>
-
-                            <div class="text-muted">
-                                {{ session.csv_filename }}
-                            </div>
-                        </div>
-
-                        {% if session.video_filename %}
-                            <a
-                                href="{{ url_for(
-                                    'recording_file',
-                                    filename=session.video_filename
-                                ) }}"
-                                class="btn btn-outline-primary"
-                                target="_blank"
-                            >
-                                Open Recording
-                            </a>
-                        {% endif %}
-                    </div>
-
-
-                    <!-- MAIN SUMMARY -->
-                    <div class="row g-3 mb-4">
-
-                        <div class="col-md-4">
-                            <div class="border rounded p-3 h-100 text-center">
-                                <div class="text-muted">
-                                    Total Hours Slept
-                                </div>
-
-                                <div class="display-6 fw-semibold">
-                                    {{ session.results.sleep_hours }}
-                                </div>
-
-                                <div class="small text-muted">
-                                    {{ session.results.sleep_duration }}
-                                </div>
-                            </div>
-                        </div>
-
-
-                        <div class="col-md-4">
-                            <div class="border rounded p-3 h-100 text-center">
-                                <div class="text-muted">
-                                    Position Changes
-                                </div>
-
-                                <div class="display-6 fw-semibold">
-                                    {{ session.results.position_changes }}
-                                </div>
-
-                                <div class="small text-muted">
-                                    During this session
-                                </div>
-                            </div>
-                        </div>
-
-
-                        <div class="col-md-4">
-                            <div class="border rounded p-3 h-100 text-center">
-                                <div class="text-muted">
-                                    Dominant Position
-                                </div>
-
-                                <div class="display-6 fw-semibold">
-                                    {{ session.results.dominant_position }}
-                                </div>
-
-                                <div class="small text-muted">
-                                    Most recorded sleep position
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-
-                    <h5>
-                        Sleep Position Breakdown
-                    </h5>
-
-                    <p class="text-muted">
-                        Percentage is based on the total monitored
-                        session time.
-                    </p>
-
-
-                    <div class="table-responsive">
-
-                        <table class="table align-middle">
-
-                            <thead>
-                                <tr>
-                                    <th>
-                                        Sleep Position
-                                    </th>
-
-                                    <th style="width: 45%;">
-                                        Percentage
-                                    </th>
-
-                                    <th class="text-end">
-                                        Time
-                                    </th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-
-                                {% for item in session.results.breakdown %}
-
-                                    <tr>
-                                        <td>
-                                            <strong>
-                                                {{ item.position }}
-                                            </strong>
-                                        </td>
-
-                                        <td>
-
-                                            <div
-                                                class="d-flex align-items-center gap-2"
-                                            >
-                                                <div
-                                                    class="progress flex-grow-1"
-                                                    style="height: 22px;"
-                                                >
-                                                    <div
-                                                        class="progress-bar"
-                                                        role="progressbar"
-                                                        style="width: {{ item.percentage }}%;"
-                                                        aria-valuenow="{{ item.percentage }}"
-                                                        aria-valuemin="0"
-                                                        aria-valuemax="100"
-                                                    >
-                                                    </div>
-                                                </div>
-
-                                                <div
-                                                    style="min-width: 58px;"
-                                                    class="text-end fw-semibold"
-                                                >
-                                                    {{ item.percentage }}%
-                                                </div>
-                                            </div>
-
-                                        </td>
-
-                                        <td class="text-end">
-                                            {{ item.duration }}
-                                        </td>
-                                    </tr>
-
-                                {% endfor %}
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
-
-                    <div class="row g-3 mt-1">
-
-                        <div class="col-md-6">
-                            <div class="bg-light border rounded p-3">
-                                <strong>
-                                    Session Start:
-                                </strong>
-
-                                {{ session.results.start_time }}
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="bg-light border rounded p-3">
-                                <strong>
-                                    Session End:
-                                </strong>
-
-                                {{ session.results.end_time }}
-                            </div>
-                        </div>
-
-                    </div>
-
-
-                    <div class="small text-muted mt-3">
-                        Total monitored duration:
-                        {{ session.results.total_duration }}.
-                        "Total Hours Slept" excludes periods
-                        classified as No Person Detected.
-                    </div>
-
-                </div>
+        <!-- --------------------------------------------------
+        TIMEFRAME ANALYSIS SECTION (Charts & Tables)
+        --------------------------------------------------- -->
+        <div class="card shadow-sm mb-5">
+            <!--
+                TABBED NAVIGATION
+                Clicking these tabs triggers the `switchView()` JavaScript function, which
+                re-renders the charts and table
+            -->
+            <div class="card-header bg-white pt-3 pb-0 border-bottom-0">
+                <ul class="nav nav-pills" id="timeframe-tabs">
+                    <li class="nav-item"><a class="nav-link active" onclick="switchView('Daily')">Daily</a></li>
+                    <li class="nav-item"><a class="nav-link" onclick="switchView('Weekly')">Weekly</a></li>
+                    <li class="nav-item"><a class="nav-link" onclick="switchView('Fortnightly')">Fortnightly</a></li>
+                    <li class="nav-item"><a class="nav-link" onclick="switchView('Monthly')">Monthly</a></li>
+                    <li class="nav-item"><a class="nav-link" onclick="switchView('Quarterly')">Quarterly</a></li>
+                    <li class="nav-item"><a class="nav-link" onclick="switchView('Yearly')">Yearly</a></li>
+                </ul>
             </div>
 
-        {% endfor %}
+            <div class="card-body border-top mt-2">
 
-    {% endif %}
+                <!-- Title on the selected tab (e.g. "Weekly Breakdown") -->
+                <h4 id="view-title" class="mb-3">Daily Breakdown</h4>
 
-</div>
+                <!-- BAR CHART CONTAINER -->
+                <h6 class="text-muted fw-bold mb-0">Total Hours Slept per Position</h6>
+                <div id="analytics-bar-chart" style="height: 350px; width: 100%;" class="mb-4"></div>
 
+                <!-- LINE CHART CONTAINER -->
+                <h6 class="text-muted fw-bold mb-0">Position Percentage Trends (%)</h6>
+                <div id="analytics-line-chart" style="height: 350px; width: 100%;"></div>
 
+                <hr class="my-4">
 
-{% if comparison_results|length > 1 %}
-<script>
-    const comparisonSessions = {{ comparison_results | tojson }};
+                <!--
+                    DATA TABLE
+                -->
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th id="table-header-period">Date</th>
+                                <th>Nights</th>
+                                <th>Time</th>
+                                <th>Avg. / Night</th>
+                                <th>Changes</th>
+                                <th>Dominant Pos</th>
+                                <th style="width: 25%;">Breakdown</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analytics-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-    const positionNames = [
-        "Back",
-        "Left Side",
-        "Right Side",
-        "Stomach",
-        "Unknown",
-        "No Person Detected"
-    ];
+        <!-- --------------------------------------------------
+        JAVASCRIPT RENDERING
+        Takes the backend Python data and builds the charts and table
+        --------------------------------------------------- -->
+        <script>
+        // 1. Data Injection: Use Jinja's `tojson` filter to convert Python dictionaries into JavaScript Objects
+        const periodData = {{ period_data | tojson }};
+        const globalPositions = {{ global_data.Positions | tojson }};
+        const sortedPositions = Object.keys(globalPositions);
 
-    const sessionLabels = comparisonSessions.map(
-        session => session.session_name
-    );
+        // 2. Color Mapping: Sets the colours for positions for both charts
+        const COLOR_MAP = {
+            'Back': '#00cc00',
+            'Right Side': '#0088ff',
+            'Left Side': '#aa00ff',
+            'Stomach': '#ff9900',
+            'No Person Detected': '#ff0000',
+            'Unknown': '#888888'
+        };
 
-    const datasets = positionNames.map(
-        positionName => ({
-            label: positionName,
-            data: comparisonSessions.map(session => {
-                const breakdown = session.results.breakdown || [];
+        // --------------------------------------------------
+        // FUNCTION: switchView
+        // Handles the UI change when a user clicks a new timeframe tab.
+        // --------------------------------------------------
 
-                const item = breakdown.find(
-                    entry => entry.position === positionName
-                );
+        function switchView(timeframe) {
+            // Remove the 'active' styling class from all tabs, then apply it only to the clicked tab
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.innerText.trim() === timeframe) {
+                    link.classList.add('active');
+                }
+            });
 
-                return item ? item.percentage : 0;
-            })
-        })
-    );
+            // Update the text headers to reflect the newly selected timeframe
+            document.getElementById("view-title").innerText = timeframe + " Breakdown";
+            document.getElementById("table-header-period").innerText = timeframe;
 
-    const chartElement = document.getElementById(
-        "comparisonChart"
-    );
+            // Trigger the main rendering loop with the new timeframe key (e.g. 'Weekly')
+            renderData(timeframe);
+        }
 
-    if (chartElement) {
-        new Chart(
-            chartElement,
-            {
-                type: "bar",
+        // --------------------------------------------------
+        // FUNCTION: renderData
+        // Builds the table rows and Plotly charts based on the selected timeframe.
+        // --------------------------------------------------
+        function renderData(timeframe) {
 
-                data: {
-                    labels: sessionLabels,
-                    datasets: datasets
-                },
+            // Extract only the data relevant to the selected timeframe
+            const dataObj = periodData[timeframe];
 
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+            // Sort the labels chronologically
+            const labels = Object.keys(dataObj).sort();
+            const tableBody = document.getElementById("analytics-table-body");
 
-                    interaction: {
-                        mode: "index",
-                        intersect: false
-                    },
+            tableBody.innerHTML = "";
 
-                    plugins: {
-                        legend: {
-                            position: "top"
-                        },
+            // Initialize empty trace objects for Plotly.
+            // Plotly requires data separated by trace (e.g. all 'Back' data in one array, all 'Left Side' in the other).
+            let chartTraces = {};
+            let lineTraces = {};
 
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return (
-                                        context.dataset.label
-                                        + ": "
-                                        + context.parsed.y.toFixed(1)
-                                        + "%"
-                                    );
-                                }
-                            }
-                        }
-                    },
+            // Pre-build the trace structures based on the sleep positions
+            for (const pos of sortedPositions) {
+                const color = COLOR_MAP[pos] || '#333333'; // Fallback to dark gray if position color is not in list (unknown)
 
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: "Sleep Session"
-                            }
-                        },
+                // Config for the bar chart
+                chartTraces[pos] = {
+                    x: [], y: [], name: pos, type: 'bar',
+                    marker: { color: color }
+                };
 
-                        y: {
-                            beginAtZero: true,
-                            max: 100,
+                // Config for the line chart
+                lineTraces[pos] = {
+                    x: [], y: [], name: pos, type: 'scatter', mode: 'lines+markers',
+                    line: { color: color, width: 3 },
+                    marker: { size: 6, color: color }
+                };
+            }
 
-                            title: {
-                                display: true,
-                                text: "Percentage of Monitored Time"
-                            },
+            // Loop over every time period
+            labels.forEach(label => {
+                const row = dataObj[label];
 
-                            ticks: {
-                                callback: function(value) {
-                                    return value + "%";
-                                }
-                            }
-                        }
+                // Extract and sort the position breakdown for the table cell from highest duration to lowest
+                let posEntries = Object.entries(row.Positions);
+                posEntries.sort((a, b) => b[1].Sec - a[1].Sec);
+
+                // Format the mini-breakdown strings for the final table column
+                let posStrings = [];
+                for (const [pos, metrics] of posEntries) {
+                    if (metrics.Pct > 0) {
+                        posStrings.push(`<strong>${pos}:</strong> ${metrics.Pct}% <span class="text-muted small">(${metrics.Str})</span>`);
                     }
                 }
+
+                // Construct the HTML for the table row
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="fw-bold">${label}</td>
+                    <td>${row.Nights}</td>
+                    <td>${row.Total_Time_Str} <br><span class="small text-muted">(${row.Total_Hours} hrs)</span></td>
+                    <td>${row.Average_Time_Str}</td>
+                    <td>${row.Position_Changes}</td>
+                    <td><span class="badge bg-secondary">${row.Dominant_Position}</span></td>
+                    <td style="font-size: 0.85rem;">${posStrings.join('<br>')}</td>
+                `;
+                tableBody.appendChild(tr);
+
+                // Push the specific data points into the Plotly for chart rendering
+                for (const pos of sortedPositions) {
+                    const metrics = row.Positions[pos];
+
+                    // Bar chart tracks total hours (Seconds / 3600)
+                    chartTraces[pos].x.push(label);
+                    chartTraces[pos].y.push(metrics ? (metrics.Sec / 3600) : 0);
+
+                    // Line chart tracks percentage
+                    lineTraces[pos].x.push(label);
+                    lineTraces[pos].y.push(metrics ? metrics.Pct : 0);
+                }
+            });
+
+            // Filter out empty traces to keep the chart clean (e.g. if 'Stomach' does not appear)
+            const finalBarTraces = [];
+            const finalLineTraces = [];
+            for (const pos of sortedPositions) {
+                if (chartTraces[pos].y.some(val => val > 0)) {
+                    finalBarTraces.push(chartTraces[pos]);
+                    finalLineTraces.push(lineTraces[pos]);
+                }
             }
-        );
-    }
-</script>
-{% endif %}
 
+            // --- PLOTLY CONFIGURATION: BAR CHART ---
+            const barLayout = {
+                barmode: 'stack', // puts the durations on top of each other
+                margin: { l: 50, r: 50, t: 20, b: 40 },
+                xaxis: { type: 'category' }, 
+                yaxis: { title: 'Hours' },
+                legend: { orientation: 'h', y: -0.15, traceorder: 'normal' }
+            };
 
-<script
-    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
->
-</script>
+            // --- PLOTLY CONFIGURATION: LINE CHART ---
+            const lineLayout = {
+                margin: { l: 50, r: 50, t: 20, b: 40 },
+                xaxis: { type: 'category' },
+                yaxis: {
+                    title: 'Percentage (%)',
+                    range: [0, 105], // Caps the Y-axis slightly above 100% so it looks better
+                    ticksuffix: '%'
+                },
+                legend: { orientation: 'h', y: -0.15, traceorder: 'normal' }
+            };
+
+            // Render both charts into their respective divs
+            Plotly.react(
+                'analytics-bar-chart',
+                finalBarTraces,
+                barLayout,
+                { responsive: true, displayModeBar: false } // Hides Plotly toolbar
+            );
+
+            Plotly.react(
+                'analytics-line-chart',
+                finalLineTraces,
+                lineLayout,
+                { responsive: true, displayModeBar: false }
+            );
+        }
+
+        // --------------------------------------------------
+        // ON PAGE LOAD
+        // Automatically click the 'Daily' tab to render the initial default view.
+        // --------------------------------------------------
+        window.onload = () => switchView('Daily');
+
+        </script>
+        {% endif %}
+    </div>
+
+    <!-- --------------------------------------------------
+    BOOTSTRAP JS
+    --------------------------------------------------- -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
